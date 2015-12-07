@@ -47,12 +47,14 @@ class CaseInsensitiveDict(dict):
 class WMISampler(object):
     """
     WMI Sampler.
+    - inclusive applies to the filters. An inclusive filter will OR filter
+    elements, a non-inclusive will AND the WHERE clause.
     """
     _wmi_locators = {}
     _wmi_connections = {}
 
     def __init__(self, logger, class_name, property_names, filters="", host="localhost",
-                 namespace="root\\cimv2", username="", password=""):
+                 namespace="root\\cimv2", username="", password="", inclusive=False):
         self.logger = logger
 
         # Connection information
@@ -82,6 +84,7 @@ class WMISampler(object):
         self.class_name = class_name
         self.property_names = property_names
         self.filters = filters
+        self.inclusive_filter = inclusive
         self._formatted_filters = None
         self.property_counter_types = None
 
@@ -107,7 +110,7 @@ class WMISampler(object):
         """
         if not self._formatted_filters:
             filters = deepcopy(self.filters)
-            self._formatted_filters = self._format_filter(filters)
+            self._formatted_filters = self._format_filter(filters, self.inclusive_filter)
         return self._formatted_filters
 
     def sample(self):
@@ -251,11 +254,11 @@ class WMISampler(object):
         return connection
 
     @staticmethod
-    def _format_filter(filters):
+    def _format_filter(filters, inclusive):
         """
         Transform filters to a comprehensive WQL `WHERE` clause.
         """
-        def build_where_clause(fltr):
+        def build_where_clause(fltr, inclusive):
             """
             Recursively build `WHERE` clause.
             """
@@ -267,6 +270,12 @@ class WMISampler(object):
                     property=prop,
                     constant=value
                 )
+            if inclusive:
+                return "{property} = '{constant}' OR {more}".format(
+                    property=prop,
+                    constant=value,
+                    more=build_where_clause(fltr)
+                )
             return "{property} = '{constant}' AND {more}".format(
                 property=prop,
                 constant=value,
@@ -276,7 +285,7 @@ class WMISampler(object):
         if not filters:
             return ""
 
-        return " WHERE {clause}".format(clause=build_where_clause(filters))
+        return " WHERE {clause}".format(clause=build_where_clause(filters, inclusive))
 
     def _query(self):
         """

@@ -76,6 +76,7 @@ if sys.platform == 'win32':
 
         # agent
         'checks.network_checks',
+        'checks.windows',
         'checks.libs.vmware.*',
         'httplib2',
 
