@@ -9,7 +9,7 @@ MOCK_CONFIG = {
     'instances': [
         {'process_metrics': [
             {
-                'name': 'get_memory_info',
+                'name': 'memory_info',
                 'type': 'gauge',
                 'active': 'yes'
             },
@@ -26,7 +26,7 @@ MOCK_CONFIG_2 = {
     'instances': [
         {'process_metrics': [
             {
-                'name': 'get_memory_info',
+                'name': 'memory_info',
                 'type': 'gauge',
                 'active': 'yes'
             },
