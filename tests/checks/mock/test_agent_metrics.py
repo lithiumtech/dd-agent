@@ -14,7 +14,7 @@ MOCK_CONFIG = {
                 'active': 'yes'
             },
             {
-                'name': 'get_cpu_times',
+                'name': 'cpu_times',
                 'type': 'rate',
                 'active': 'yes'
             },
