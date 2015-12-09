@@ -272,7 +272,7 @@ class WMISampler(object):
     inclusive to True.
     """
     @staticmethod
-    def _format_filter(filters, inclusive):
+    def _format_filter(filters, inclusive=False):
         """
         Transform filters to a comprehensive WQL `WHERE` clause.
         """

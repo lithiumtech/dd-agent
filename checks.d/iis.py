@@ -1,14 +1,11 @@
 '''
 Check the performance counters from IIS
 '''
-#stdlib
-from collections import namedtuple
-
 # project
 from checks import AgentCheck
 from checks.wmi import WinWMICheck
+from checks.libs.wmi.types import WMIMetric
 
-WMIMetric = namedtuple('WMIMetric', ['name', 'value', 'tags'])
 
 class IIS(WinWMICheck):
     METRICS = [
@@ -107,13 +104,13 @@ class IIS(WinWMICheck):
             if sitename not in sites:
                 continue
             elif sitename != "_Total":
-                tags.append(sitename)
+                tags.append("site:{0}".format(sitename))
 
             # Tag with `tag_queries` parameter
             for wmi_property, wmi_value in wmi_obj.iteritems():
                 # Tag with `tag_by` parameter
                 try:
-                    metrics.append(WMIMetric(wmi_property, float(wmi_value), tags + [sitename]))
+                    metrics.append(WMIMetric(wmi_property, float(wmi_value), tags))
                 except ValueError:
                     self.log.warning(u"When extracting metrics with WMI, found a non digit value"
                                      " for property '{0}'.".format(wmi_property))

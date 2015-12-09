@@ -150,6 +150,15 @@ class SWbemServices(object):
                 or query == "Select UnknownProperty from Win32_Process WHERE Handle = '4036'":
             results += load_fixture("win32_process")
 
+        if query == ("Select ServiceUptime,TotalBytesSent,TotalBytesReceived,TotalBytesTransferred,CurrentConnections,TotalFilesSent,TotalFilesReceived,"
+                     "TotalConnectionAttemptsAllInstances,TotalGetRequests,TotalPostRequests,TotalHeadRequests,TotalPutRequests,TotalDeleteRequests,"
+                     "TotalOptionsRequests,TotalTraceRequests,TotalNotFoundErrors,TotalLockedErrors,TotalAnonymousUsers,TotalNonAnonymousUsers,TotalCGIRequests,"
+                     "TotalISAPIExtensionRequests from Win32_PerfFormattedData_W3SVC_WebService WHERE Name = 'Failing site' OR Name = 'Default_Web_Site'"):
+            results += load_fixture("win32_perfformatteddata_w3svc_webservice", ("Name", "Default_Web_Site"))
+        if query == ("Select Name,State from Win32_Service WHERE Name = 'WSService' OR Name = 'WinHttpAutoProxySvc'"):
+            results += load_fixture("win32_service_up", ("Name", "WinHttpAutoProxySvc"))
+            results += load_fixture("win32_service_down", ("Name", "WSService"))
+
         return results
 
     ExecQuery.call_count = _exec_query_call_count

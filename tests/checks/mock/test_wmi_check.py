@@ -4,6 +4,7 @@ from mock import Mock
 # project
 from tests.checks.common import AgentCheckTest
 from tests.core.test_wmi import TestCommonWMI
+from checks.libs.wmi.types import WMIMetric, MissingTagBy
 
 
 class WMITestCase(AgentCheckTest, TestCommonWMI):
@@ -166,7 +167,6 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         metrics = self.check._extract_metrics(wmi_sampler, "name", [], ["foobar"])
 
         # Assess
-        WMIMetric = self.load_class("WMIMetric")
         expected_metrics = [
             WMIMetric("freemegabytes", 19742, ["foobar", "name:c:"]),
             WMIMetric("avgdiskbytesperwrite", 1536, ["foobar", "name:c:"]),
@@ -200,7 +200,6 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         self.run_check(config)
 
         # Invalid
-        MissingTagBy = self.load_class("MissingTagBy")
         config = {
             'instances': [self.WMI_CONFIG_NO_TAG_BY]
         }
@@ -248,7 +247,6 @@ class WMITestCase(AgentCheckTest, TestCommonWMI):
         )
 
         # Assess
-        WMIMetric = self.load_class("WMIMetric")
         expected_metrics = [
             WMIMetric("ioreadbytespersec", 20455, tags=['foobar', 'commandline:c:\\'
                       'programfiles(x86)\\google\\chrome\\application\\chrome.exe']),

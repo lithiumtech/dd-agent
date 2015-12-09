@@ -1,33 +1,10 @@
-# stdlib
-from collections import namedtuple
 
 # project
 from checks import AgentCheck
+
 from checks.libs.wmi.sampler import WMISampler
-
-
-WMIMetric = namedtuple('WMIMetric', ['name', 'value', 'tags'])
-
-
-class InvalidWMIQuery(Exception):
-    """
-    Invalid WMI Query.
-    """
-    pass
-
-
-class MissingTagBy(Exception):
-    """
-    WMI query returned multiple rows but no `tag_by` value was given.
-    """
-    pass
-
-
-class TagQueryUniquenessFailure(Exception):
-    """
-    'Tagging query' did not return or returned multiple results.
-    """
-    pass
+from checks.libs.wmi.types import WMIMetric
+from checks.libs.wmi.types import MissingTagBy, TagQueryUniquenessFailure
 
 
 class WinWMICheck(AgentCheck):
@@ -247,4 +224,3 @@ class WinWMICheck(AgentCheck):
             self.wmi_props[instance_key] = (metric_name_by_property, properties)
 
         return self.wmi_props[instance_key]
-
