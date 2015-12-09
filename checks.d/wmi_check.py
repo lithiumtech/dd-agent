@@ -1,5 +1,5 @@
 # project
-from checks.windows import WinWMICheck
+from checks.wmi import WinWMICheck
 
 
 class WMICheck(WinWMICheck):

@@ -9,59 +9,79 @@ from datetime import datetime, timedelta
 import wmi
 
 # project
-from checks import AgentCheck
+from checks.wmi import WinWMICheck
 
 SOURCE_TYPE_NAME = 'event viewer'
 EVENT_TYPE = 'win32_log_event'
 
+class Win32EventLogWMI(WinWMICheck):
+    EVENT_PROPERTIES = [
+        "Message",
+        "SourceName",
+        "TimeGenerated",
+        "Type",
+        "User",
+        "InsertionStrings",
+        "EventCode"
+    ]
+    NAMESPACE = "root\\CIMV2"
+    CLASS = "Win32_NTLogEvent"
 
-class Win32EventLog(AgentCheck):
     def __init__(self, name, init_config, agentConfig, instances=None):
-        AgentCheck.__init__(self, name, init_config, agentConfig,
+        WinWMICheck.__init__(self, name, init_config, agentConfig,
                             instances=instances)
         self.last_ts = {}
-        self.wmi_conns = {}
-
-    def _get_wmi_conn(self, host, user, password):
-        key = "%s:%s:%s" % (host, user, password)
-        if key not in self.wmi_conns:
-            self.wmi_conns[key] = wmi.WMI(host, user=user, password=password)
-        return self.wmi_conns[key]
+        self.filters = []
 
     def check(self, instance):
-        host = instance.get('host')
-        user = instance.get('username')
-        password = instance.get('password')
-        tags = instance.get('tags')
+        # Connect to the WMI provider
+        host = instance.get('host', "localhost")
+        username = instance.get('username', "")
+        password = instance.get('password', "")
+        instance_tags = instance.get('tags', [])
         notify = instance.get('notify', [])
-        w = self._get_wmi_conn(host, user, password)
+
+        ltype = instance.get('type')
+        user = instance.get('user')
+        source_name = instance.get('source_name')
+        log_file = instance.get('log_file')
+        event_id = instance.get('event_id')
+
+        instance_key = self._get_instance_key(host, self.NAMESPACE, self.CLASS)
 
         # Store the last timestamp by instance
-        instance_key = self._instance_key(instance)
         if instance_key not in self.last_ts:
             self.last_ts[instance_key] = datetime.utcnow()
             return
 
-        # Find all events in the last check that match our search by running a
-        # straight WQL query against the event log
         last_ts = self.last_ts[instance_key]
-        q = EventLogQuery(
-            ltype=instance.get('type'),
-            user=instance.get('user'),
-            source_name=instance.get('source_name'),
-            log_file=instance.get('log_file'),
-            event_id=instance.get('event_id'),
-            message_filters=instance.get('message_filters', []),
-            start_ts=last_ts
-        )
-        wql = q.to_wql()
-        self.log.debug("Querying for Event Log events: %s" % wql)
-        events = w.query(wql)
+        self.filters += [{'TimeGenerated': ('>=', self._dt_to_wmi(last_ts))}]
+        if ltype:
+            self.filters += [{'Type': ('=', ltype)}]
+        if user:
+            self.filters += [{'User': ('=', user)}]
+        if event_id:
+            self.filters += [{'EventCode': ('=', event_id)}]
+        if source_name:
+            self.filters += [{'SourceName': ('=', source_name)}]
+        if log_file:
+            self.filters += [{'LogFile': ('=', log_file)}]
 
-        # Save any events returned to the payload as Datadog events
+        wmi_sampler = self._get_wmi_sampler(
+            instance_key,
+            self.CLASS, self.EVENT_PROPERTIES,
+            filters=self.filters,
+            host=host, namespace=self.NAMESPACE,
+            username=username, password=password,
+            inclusive=False
+        )
+
+        wmi_sampler.sample()
+
+        events = self._extract_events(wmi_sampler)
         for ev in events:
             log_ev = LogEvent(ev, self.agentConfig.get('api_key', ''),
-                              self.hostname, tags, notify,
+                              self.hostname, instance_tags, notify,
                               self.init_config.get('tag_event_id', False))
 
             # Since WQL only compares on the date and NOT the time, we have to
@@ -75,65 +95,13 @@ class Win32EventLog(AgentCheck):
         # Update the last time checked
         self.last_ts[instance_key] = datetime.utcnow()
 
-    def _instance_key(self, instance):
-        ''' Generate a unique key per instance for use with keeping track of
-            state for each instance.
-        '''
-        return '%s' % (instance)
 
+    def _extract_events(self, wmi_sampler):
+        events = []
+        for wmi_obj in wmi_sampler:
+            events.append(wmi_obj)
 
-class EventLogQuery(object):
-    def __init__(self, ltype=None, user=None, source_name=None, log_file=None,
-                 event_id=None, start_ts=None, message_filters=None):
-
-        self.filters = [
-            ('Type', self._convert_event_types(ltype)),
-            ('User', user),
-            ('EventCode', event_id),
-            ('SourceName', source_name),
-            ('LogFile', log_file)
-        ]
-        self.message_filters = message_filters or []
-        self.start_ts = start_ts
-
-    def to_wql(self):
-        ''' Return this query as a WQL string. '''
-        wql = """
-        SELECT Message, SourceName, TimeGenerated, Type, User, InsertionStrings, EventCode
-        FROM Win32_NTLogEvent
-        WHERE TimeGenerated >= "%s"
-        """ % (self._dt_to_wmi(self.start_ts))
-        for name, vals in self.filters:
-            wql = self._add_filter(name, vals, wql)
-        for msg_filter in self.message_filters:
-            wql = self._add_message_filter(msg_filter, wql)
-        return wql
-
-    def _add_filter(self, name, vals, q):
-        if not vals:
-            return q
-        # A query like (X = Y) does not work, unless there are multiple
-        # statements inside the parentheses, such as (X = Y OR Z = Q)
-        if len(vals) == 1:
-            vals = vals[0]
-        if not isinstance(vals, list):
-            q += '\nAND %s = "%s"' % (name, vals)
-        else:
-            q += "\nAND (%s)" % (' OR '.join(
-                ['%s = "%s"' % (name, l) for l in vals]
-            ))
-        return q
-
-    def _add_message_filter(self, msg_filter, q):
-        ''' Filter on the message text using a LIKE query. If the filter starts
-            with '-' then we'll assume that it's a NOT LIKE filter.
-        '''
-        if msg_filter.startswith('-'):
-            msg_filter = msg_filter[1:]
-            q += '\nAND NOT Message LIKE "%s"' % msg_filter
-        else:
-            q += '\nAND Message LIKE "%s"' % msg_filter
-        return q
+        return events
 
     def _dt_to_wmi(self, dt):
         ''' A wrapper around wmi.from_time to get a WMI-formatted time from a
@@ -143,12 +111,6 @@ class EventLogQuery(object):
                              hours=dt.hour, minutes=dt.minute,
                              seconds=dt.second, microseconds=0, timezone=0)
 
-    def _convert_event_types(self, types):
-        ''' Detect if we are running on <= Server 2003. If so, we should convert
-            the EventType values to integers
-        '''
-        return types
-
 
 class LogEvent(object):
     def __init__(self, ev, api_key, hostname, tags, notify_list, tag_event_id):
@@ -157,7 +119,7 @@ class LogEvent(object):
         self.hostname = hostname
         self.tags = self._tags(tags, ev.EventCode) if tag_event_id else tags
         self.notify_list = notify_list
-        self.timestamp = self._wmi_to_ts(self.event.TimeGenerated)
+        self.timestamp = self._wmi_to_ts(self.event['TimeGenerated'])
 
     def to_event_dict(self):
         return {
@@ -201,14 +163,14 @@ class LogEvent(object):
         return tags_list
 
     def _msg_title(self, event):
-        return '%s/%s' % (event.Logfile, event.SourceName)
+        return '%s/%s' % (event['Logfile'], event['SourceName'])
 
     def _msg_text(self, event):
         msg_text = ""
-        if event.Message:
-            msg_text = "%s\n" % event.Message
-        elif event.InsertionStrings:
-            msg_text = "\n".join([i_str for i_str in event.InsertionStrings
+        if 'Message' in event:
+            msg_text = "%s\n" % event['Message']
+        elif 'InsertionStrings' in event:
+            msg_text = "\n".join([i_str for i_str in event['InsertionStrings']
                                   if i_str.strip()])
 
         if self.notify_list:
@@ -217,7 +179,7 @@ class LogEvent(object):
         return msg_text
 
     def _alert_type(self, event):
-        event_type = event.Type
+        event_type = event['Type']
         # Convert to a Datadog alert type
         if event_type == 'Warning':
             return 'warning'
@@ -226,4 +188,4 @@ class LogEvent(object):
         return 'info'
 
     def _aggregation_key(self, event):
-        return event.SourceName
+        return event['SourceName']

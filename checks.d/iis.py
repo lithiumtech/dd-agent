@@ -6,7 +6,7 @@ from collections import namedtuple
 
 # project
 from checks import AgentCheck
-from checks.windows import WinWMICheck
+from checks.wmi import WinWMICheck
 
 WMIMetric = namedtuple('WMIMetric', ['name', 'value', 'tags'])
 
@@ -62,7 +62,7 @@ class IIS(WinWMICheck):
 
 
         instance_key = self._get_instance_key(host, self.NAMESPACE, self.CLASS)
-        filters = map(lambda x: {"Name": x}, sites)
+        filters = map(lambda x: {"Name": tuple(('=', x))}, sites)
 
         metrics_by_property, properties = self._get_wmi_properties(instance_key, self.METRICS, [])
 

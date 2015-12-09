@@ -2,7 +2,7 @@
 """
 # project
 from checks import AgentCheck
-from checks.windows import WinWMICheck
+from checks.wmi import WinWMICheck
 
 
 class WindowsService(WinWMICheck):
@@ -38,7 +38,7 @@ class WindowsService(WinWMICheck):
             raise Exception('No services defined in windows_service.yaml')
 
         properties = ["Name", "State"]
-        filters = map(lambda x: {"Name": x}, services)
+        filters = map(lambda x: {"Name": tuple(('=', x))}, services)
         wmi_sampler = self._get_wmi_sampler(
             instance_key,
             self.CLASS, properties,

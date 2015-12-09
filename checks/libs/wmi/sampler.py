@@ -253,6 +253,24 @@ class WMISampler(object):
 
         return connection
 
+    """
+    Builds filter from a filter list.
+    - filters: expects a list of dicts, typically:
+            - [{'Property': value},...] or
+            - [{'Property': (comparison_op, value)},...]
+
+            NOTE: If we just provide a value we defailt to '=' comparison operator.
+            Otherwise, specify the operator in a tuple as above: (comp_op, value)
+
+            The filters also support lists/tuples as property 'values' to filter.
+            When such a list is provided, we OR filter for all such property values:
+            - [{'Property': [value1, value2, value3]},...] or
+            - [{'Property': [(cmp_op, value1), (cmp_op, value2)]},...] or
+
+    Normally the filter is expected to be exclusive, such that all filter conditions
+    should be met - therefore we AND all filters. If you'd like to OR, then set
+    inclusive to True.
+    """
     @staticmethod
     def _format_filter(filters, inclusive):
         """
@@ -264,22 +282,49 @@ class WMISampler(object):
             """
             f = fltr.pop()
             prop, value = f.popitem()
+            if isinstance(value, tuple):
+                oper = value[0]
+                value = value[1]
+            else:
+                oper = '='
 
             if len(fltr) == 0:
-                return "{property} = '{constant}'".format(
-                    property=prop,
-                    constant=value
+                if isinstance(value, list):
+                    internal_filter = map(lambda x: {prop: (oper, x)}, value)
+                    return "( {clause} )".format(clause=build_where_clause(internal_filter, True))
+                else:
+                    return "{property} {cmp} '{constant}'".format(
+                        property=prop,
+                        cmp=oper,
+                        constant=value
+                    )
+
+            if isinstance(value, list):
+                internal_filter = map(lambda x: {prop: (oper, x)}, value)
+                if inclusive:
+                    return "( {clause} ) OR {more}".format(
+                        clause=build_where_clause(internal_filter, True),
+                        more=build_where_clause(fltr, inclusive)
+                    )
+
+                return "( {clause} ) AND {more}".format(
+                    clause=build_where_clause(internal_filter, True),
+                    more=build_where_clause(fltr, inclusive)
                 )
+
             if inclusive:
-                return "{property} = '{constant}' OR {more}".format(
+                return "{property} {cmp} '{constant}' OR {more}".format(
                     property=prop,
+                    cmp=oper,
                     constant=value,
-                    more=build_where_clause(fltr)
+                    more=build_where_clause(fltr, inclusive)
                 )
-            return "{property} = '{constant}' AND {more}".format(
+
+            return "{property} {cmp} '{constant}' AND {more}".format(
                 property=prop,
+                cmp=oper,
                 constant=value,
-                more=build_where_clause(fltr)
+                more=build_where_clause(fltr, inclusive)
             )
 
         if not filters:
@@ -393,7 +438,8 @@ class WMISampler(object):
 
                 try:
                     item[wmi_property.Name] = float(wmi_property.Value)
-                except ValueError:
+                except (TypeError, ValueError) as e:
                     item[wmi_property.Name] = wmi_property.Value
+
             results.append(item)
         return results
