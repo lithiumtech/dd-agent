@@ -158,6 +158,9 @@ class SWbemServices(object):
         if query == ("Select Name,State from Win32_Service WHERE Name = 'WSService' OR Name = 'WinHttpAutoProxySvc'"):
             results += load_fixture("win32_service_up", ("Name", "WinHttpAutoProxySvc"))
             results += load_fixture("win32_service_down", ("Name", "WSService"))
+        if query == ("Select Message,SourceName,TimeGenerated,Type,User,InsertionStrings,EventCode from Win32_NTLogEvent WHERE ( SourceName = 'MSSQLSERVER' ) "
+                     "AND ( Type = 'Warning' OR Type = 'Error' ) AND TimeGenerated >= '20151224113047.000000-480'"):
+            results += load_fixture("win32_ntlogevent")
 
         return results
 
@@ -190,6 +193,14 @@ class Dispatch(object):
 
     ConnectServer.call_count = _connect_call_count
 
+def to_time(wmi_ts):
+    "Just return any time struct"
+    return (2015, 12, 24, 11, 30, 47, 0, 0)
+
+def from_time(year=0, month=0, day=0, hours=0, minutes=0,
+            seconds=0, microseconds=0, timezone=0):
+    "Just return any WMI date"
+    return "20151224113047.000000-480"
 
 class TestCommonWMI(unittest.TestCase):
     """
@@ -205,6 +216,7 @@ class TestCommonWMI(unittest.TestCase):
         sys.modules['pywintypes'] = Mock()
         sys.modules['win32com'] = Mock()
         sys.modules['win32com.client'] = Mock(Dispatch=Dispatch)
+        sys.modules['wmi'] = Mock(from_time=from_time, to_time=to_time)
 
         from checks.libs.wmi import sampler
         WMISampler = partial(sampler.WMISampler, log)
