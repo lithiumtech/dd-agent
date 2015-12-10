@@ -23,10 +23,8 @@ class W32LogEventTestCase(AgentCheckTest, TestCommonWMI):
         config = {
             'instances': [self.WIN_LOGEVENT_CONFIG]
         }
-
         self.run_check_twice(config)
 
-        # TODO: Test for events
         self.assertEvent('SomeMessage', count=1,
                          tags=self.WIN_LOGEVENT_CONFIG['tags'],
                          msg_title='Application/MSQLSERVER',

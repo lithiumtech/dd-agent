@@ -132,11 +132,12 @@ class IIS(WinWMICheck):
             uptime = wmi_obj["ServiceUptime"]
             status = AgentCheck.CRITICAL if uptime == 0 else AgentCheck.OK
 
-            self.service_check("iis.site_up", status, tags=['site:%s' % sitename])
+            self.service_check("iis.site_up", status, tags=['site:{0}'.format(self.normalize(sitename))])
             expected_sites.remove(sitename)
 
         for site in expected_sites:
-            self.service_check("iis.site_up", AgentCheck.CRITICAL, tags=['site:%s' % site])
+            self.service_check("iis.site_up", AgentCheck.CRITICAL,
+                               tags=['site:{0}'.format(self.normalize(site))])
 
 
     def _submit_metrics(self, wmi_metrics, metrics_by_property):
